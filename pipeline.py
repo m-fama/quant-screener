@@ -34,6 +34,45 @@ def horizon_needs_fundamentals(horizon: str) -> bool:
     return any(f in weights for f in _FUND_FACTORS)
 
 
+def _latest_prices(prices, tickers: list[str]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for t in tickers:
+        if t in prices.columns:
+            s = prices[t].dropna()
+            if len(s):
+                out[t] = float(s.iloc[-1])
+    return out
+
+
+def load_fundamentals(tickers: list[str], prices, *, refresh: bool = False, asof=None):
+    """Fundamentals for US tickers, EDGAR-first with optional Yahoo backfill.
+
+    EDGAR is free, point-in-time and rate-limit-free, but doesn't cover ETFs,
+    some foreign issuers, or pre-filing IPOs — those get backfilled from Yahoo.
+    """
+    latest = _latest_prices(prices, tickers)
+
+    if config.FUNDAMENTALS_SOURCE == "edgar":
+        import pandas as pd
+
+        import edgar_data
+        df = edgar_data.get_fundamentals(tickers, prices=latest, force=refresh, asof=asof)
+        if config.FUNDAMENTALS_FALLBACK:
+            key = ["profitMargins", "returnOnEquity", "revenueGrowth"]
+            miss = [t for t in df.index if df.loc[t, key].isna().all()]
+            # Yahoo has no point-in-time history, so only backfill live (asof=None).
+            if miss and asof is None:
+                ydf = data_loader.get_fundamentals(miss).reindex(columns=df.columns)
+                df = pd.concat([df.drop(index=miss), ydf]).reindex(index=tickers)
+        # Ensure numeric columns are floats (concat/None can leave them object).
+        for c in df.columns:
+            if c not in ("shortName", "longName", "sector"):
+                df[c] = pd.to_numeric(df[c], errors="coerce")
+        return df
+
+    return data_loader.get_fundamentals(tickers, force=refresh)
+
+
 def build_scored(
     universe_name: str,
     horizon: str,
@@ -66,7 +105,11 @@ def build_scored(
     else:
         candidates = list(price_table.index)
 
-    fundamentals = prov.get_fundamentals(candidates, force=refresh)
+    # EDGAR-first fundamentals (free, point-in-time) with Yahoo backfill.
+    if universe_name == "ngx":
+        fundamentals = prov.get_fundamentals(candidates, force=refresh)
+    else:
+        fundamentals = load_fundamentals(candidates, prices, refresh=refresh)
     sub_prices = prices[[c for c in candidates if c in prices.columns]]
     sub_volume = (
         volume[[c for c in candidates if c in volume.columns]]

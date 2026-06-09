@@ -41,6 +41,30 @@ POPULAR_EXTRA = [
     "DASH", "RDDT", "CHWY", "ETSY", "W", "WBD", "F", "GM", "NIO",
 ]
 
+# Thematic "early movers" — high-interest growth names riding current narratives
+# (AI compute & power, chips/memory, quantum, space/defense, EV/battery, biotech).
+# Many sit outside the S&P indices, so without this list the screener can't even
+# see them. Speculative/pre-profit names will rank mostly on price momentum
+# (their fundamentals are thin by nature) — that's the appropriate treatment.
+THEMATIC_MOVERS = [
+    # AI compute, data-center power & energy
+    "BE", "VRT", "GEV", "CEG", "TLN", "NRG", "POWL", "SMR", "OKLO", "NNE",
+    "FLNC", "STEM", "PLUG", "BLDP", "AMPX", "VST", "GEHC",
+    # Semis / memory / photonics / networking
+    "AMKR", "RMBS", "ACLS", "AEHR", "INDI", "AMBA", "CRDO", "ALAB", "NVTS",
+    "WOLF", "SITM", "MTSI", "POWI", "SMTC", "MRVL", "ARM", "LSCC", "ONTO",
+    # Quantum computing
+    "IONQ", "RGTI", "QBTS", "QUBT",
+    # Space / defense tech
+    "RKLB", "ASTS", "LUNR", "RDW", "KTOS", "AVAV",
+    # EV / battery / clean
+    "QS", "ENVX", "CHPT", "FSLR", "ENPH", "SEDG", "RUN",
+    # Biotech / health-tech movers
+    "VKTX", "CRSP", "NTLA", "RXRX", "TEM", "GH", "EXAS",
+    # Fintech / crypto-adjacent
+    "MARA", "RIOT", "CLSK", "BMNR", "MSTR",
+]
+
 # Broad and factor ETFs / funds — useful for the longer-horizon allocation side.
 ETFS_CORE = [
     # Broad market
@@ -52,7 +76,7 @@ ETFS_CORE = [
     # Sectors
     "XLK", "XLF", "XLE", "XLV", "XLY", "XLI", "XLP", "XLU", "XLB", "XLRE", "XLC", "SMH", "SOXX",
     # Themes / alternatives
-    "GLD", "SLV", "VNQ", "ARKK", "ICLN", "IBIT",
+    "GLD", "SLV", "VNQ", "ARKK", "ICLN", "IBIT", "DRAM", "BOTZ", "ROBO", "QTUM",
 ]
 
 # Commodities & metals, expressed via liquid ETFs/ETNs (free, clean, tradeable).
@@ -154,29 +178,32 @@ def get_sp600() -> list[str]:
 
 
 def get_sp1500() -> list[str]:
-    """All US Stocks proxy: S&P 1500 (large + mid + small cap) + popular names."""
-    return sorted(set(get_sp500() + get_sp400() + get_sp600() + POPULAR_EXTRA))
+    """All US Stocks proxy: S&P 1500 (large + mid + small cap) + popular &
+    thematic early-mover names that sit outside the indices."""
+    return sorted(set(
+        get_sp500() + get_sp400() + get_sp600() + POPULAR_EXTRA + THEMATIC_MOVERS
+    ))
 
 
 def get_emerging() -> list[str]:
     """'Emerging' pool: small/mid-cap real companies where undervalued early
-    movers actually live — S&P 400 + 600 + popular high-interest mid-caps,
+    movers actually live — S&P 400 + 600 + popular mid-caps + thematic movers,
     deliberately EXCLUDING the mega-cap S&P 500 (already well-discovered)."""
-    small_mid = set(get_sp400() + get_sp600() + POPULAR_EXTRA)
+    small_mid = set(get_sp400() + get_sp600() + POPULAR_EXTRA + THEMATIC_MOVERS)
     big = set(get_sp500())
     pool = sorted(small_mid - big)
     # Fallback: if the mid/small scrapes failed, lean on popular mid-caps.
-    return pool if len(pool) >= 50 else sorted(set(POPULAR_EXTRA))
+    return pool if len(pool) >= 50 else sorted(set(POPULAR_EXTRA + THEMATIC_MOVERS))
 
 
 # Universes whose constituents are price-only (no per-company fundamentals).
 PRICE_ONLY = {"etfs", "commodities"}
 
 UNIVERSES: dict[str, list[str]] = {
-    "stocks": sorted(set(STOCKS_CORE + POPULAR_EXTRA)),
+    "stocks": sorted(set(STOCKS_CORE + POPULAR_EXTRA + THEMATIC_MOVERS)),
     "etfs": ETFS_CORE,
     "commodities": COMMODITIES,
-    "all": sorted(set(STOCKS_CORE + POPULAR_EXTRA + ETFS_CORE)),
+    "all": sorted(set(STOCKS_CORE + POPULAR_EXTRA + THEMATIC_MOVERS + ETFS_CORE)),
 }
 
 

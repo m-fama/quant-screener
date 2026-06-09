@@ -12,10 +12,12 @@ that date:
   3. form a long (top quintile) / short (bottom quintile) portfolio and track
      its return, net of a simple per-rebalance transaction cost.
 
-Important honesty note: only PRICE-based factors are validated here, because
-free fundamentals from yfinance are a current snapshot (not point-in-time), so
-backtesting them would inject lookahead bias. Fundamental factors are used live
-but should be validated separately with point-in-time data before being trusted.
+Two modes:
+  - default: validates PRICE-based factors only.
+  - --point-in-time: also adds fundamentals from SEC EDGAR using only filings
+    that were actually filed on or before each rebalance date — a genuine,
+    lookahead-free test of the full (price + fundamentals) strategy. (Yahoo
+    fundamentals can't do this; they're only a current snapshot.)
 
 A decent factor combo shows: mean IC ~0.02-0.05+, an IC t-stat > 2, and a
 positive, reasonably steady long-short curve. Anything spectacular on free daily
@@ -53,14 +55,27 @@ def walk_forward(
     quantile: float = 0.2,
     cost_bps: float = 10.0,
     warmup: int = 252,
+    point_in_time: bool = False,
+    tickers: list[str] | None = None,
 ) -> dict:
     """Run the walk-forward test. Returns a dict of summary stats + the IC series
-    and the long-short equity curve."""
+    and the long-short equity curve.
+
+    If `point_in_time` is True, fundamental factors are added at each rebalance
+    date using ONLY SEC filings filed on or before that date (no lookahead),
+    enabling an honest test of the full (price + fundamentals) strategy.
+    """
     ics: list[float] = []
     ls_returns: list[float] = []
     dates: list = []
 
     cost = cost_bps / 1e4
+
+    facts_map = None
+    if point_in_time:
+        import edgar_data
+        cols = list(tickers) if tickers is not None else list(prices.columns)
+        facts_map = edgar_data.preload_facts(cols)
 
     i = warmup
     while i + holding_days < len(prices):
@@ -69,6 +84,18 @@ def walk_forward(
         if table.empty or len(table) < 10:
             i += rebalance_days
             continue
+
+        if point_in_time and facts_map is not None:
+            import edgar_data
+            asof = pd.Timestamp(prices.index[i]).strftime("%Y-%m-%d")
+            px_asof = {t: float(hist[t].dropna().iloc[-1])
+                       for t in table.index
+                       if t in hist.columns and hist[t].notna().any()}
+            fdf = edgar_data.fundamentals_from_facts(
+                facts_map, list(table.index), prices=px_asof, asof=asof
+            )
+            ff = factors.fundamental_factors(fdf)
+            table = table.join(ff, how="left")
 
         scored = scoring.score(table, horizon=horizon)
         fwd = _forward_return(prices, i, holding_days)
@@ -137,6 +164,11 @@ def main() -> None:
     ap.add_argument("--holding-days", type=int, default=21)
     ap.add_argument("--rebalance-days", type=int, default=21)
     ap.add_argument("--cost-bps", type=float, default=10.0)
+    ap.add_argument(
+        "--point-in-time", action="store_true",
+        help="add fundamentals via SEC EDGAR using only filings known at each "
+             "date (honest test of the full strategy; US only)",
+    )
     args = ap.parse_args()
 
     prov = data_loader.provider_for(args.universe)
@@ -146,12 +178,18 @@ def main() -> None:
         tickers, period="5y", universe_key=f"{args.universe}_bt"
     )
 
+    pit = args.point_in_time and args.universe != "ngx"
+    if pit:
+        print("Point-in-time mode: loading SEC EDGAR filings (cached after first run)...")
+
     res = walk_forward(
         prices,
         horizon=args.horizon,
         rebalance_days=args.rebalance_days,
         holding_days=args.holding_days,
         cost_bps=args.cost_bps,
+        point_in_time=pit,
+        tickers=tickers,
     )
 
     print(f"\n=== Walk-forward | universe={args.universe} | horizon={args.horizon} ===")
@@ -162,8 +200,10 @@ def main() -> None:
     print(f"  L/S mean/period     : {res['ls_mean_per_period']:.4%}")
     print(f"  L/S win rate        : {res['ls_win_rate']:.1%}")
     print(f"  L/S total return    : {res['ls_total_return']:.1%}")
+    mode = ("price + point-in-time SEC fundamentals"
+            if pit else "price factors only")
     print(
-        "\nReminder: price factors only (fundamentals are not point-in-time here). "
+        f"\nMode: {mode}. "
         "Spectacular numbers = suspect a bug or lookahead."
     )
 

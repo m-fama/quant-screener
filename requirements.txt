@@ -15,6 +15,7 @@ lxml>=5.2               # for pandas.read_html (S&P 500 constituent scrape)
 # Utilities
 python-dateutil>=2.9
 requests>=2.32
+curl_cffi>=0.7        # browser-impersonating session for resilient yfinance fetches
 
 # --- Optional / later phases (not required for the MVP) ---
 # pandas-ta-classic    # 190+ technical indicators (Python 3.10-3.12 friendly)

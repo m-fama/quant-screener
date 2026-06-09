@@ -50,9 +50,10 @@ HORIZON_BLURB: dict[str, str] = {
     "value": "Hunts beaten-down names near their lows with improving fundamentals — "
              "cheap, oversold, low debt, growing revenue. Aims for mispriced assets, "
              "not falling knives.",
-    "emerging": "Catches early movers before the crowd: severely undervalued names "
-                "with improving profits that are *just starting to turn up*. Blends a "
-                "cheap entry with the catalyst (growth) and early price confirmation.",
+    "emerging": "Growth names already trending up with improving earnings, bought "
+                "at a still-reasonable price (momentum + growth + quality). "
+                "Backtested to beat a deep-value/contrarian approach, which caught "
+                "falling knives in small caps.",
 }
 
 UNIVERSE_LABELS: dict[str, str] = {

@@ -20,6 +20,12 @@ CACHE_DIR.mkdir(exist_ok=True)
 PRICE_CACHE_HOURS = 6
 FUNDAMENTAL_CACHE_HOURS = 24
 
+# Fundamentals source: "edgar" (SEC, free, point-in-time, no rate limits) or
+# "yahoo". EDGAR is primary; Yahoo backfills the rare names EDGAR can't resolve
+# (foreign issuers, brand-new IPOs without filings) when the fallback is on.
+FUNDAMENTALS_SOURCE = "edgar"
+FUNDAMENTALS_FALLBACK = True
+
 # ---------------------------------------------------------------------------
 # Horizon profiles
 # ---------------------------------------------------------------------------
@@ -69,20 +75,24 @@ HORIZONS: dict[str, dict[str, float]] = {
         "earnings_growth": 0.15,  # growing revenue & earnings
         "profitability": 0.15,    # positive, improving margins
     },
-    # Emerging / early movers: severely undervalued names that are JUST starting
-    # to wake up. Blends a cheap, beaten-down entry (value + near-low) with
-    # *improving fundamentals* (the real catalyst) and *early price confirmation*
-    # (3-month momentum + a turn-up above the 50-day). The momentum tilt is what
-    # separates "ready for take-off" from "value trap stuck at the bottom".
+    # Emerging / early movers: companies ALREADY trending up with improving
+    # fundamentals, bought at a still-reasonable price. This is the momentum +
+    # growth + quality recipe — NOT a deep-value/contrarian bet.
+    #
+    # Why not contrarian? Point-in-time backtesting showed the original "buy
+    # beaten-down names near their 52-week lows" version had NEGATIVE predictive
+    # power in small/mid caps (it caught falling knives: IC ~-0.014, L/S ~-15%).
+    # Flipping to a momentum lead turned it positive (IC ~+0.02, L/S ~+13%).
+    # Momentum leads; earnings growth supplies the catalyst; a mild value tilt
+    # avoids overpaying. See backtest.py --point-in-time.
     "emerging": {
-        "near_52w_low": 0.12,     # undervalued entry, near the lows
-        "value": 0.15,            # cheap vs. fundamentals
-        "earnings_growth": 0.22,  # revenue/earnings inflecting up = the catalyst
-        "profitability": 0.10,    # margins turning positive
-        "quality": 0.08,          # enough balance-sheet strength to survive
-        "mom_3m": 0.18,           # early price confirmation (waking up)
-        "trend_50d": 0.07,        # reclaiming its 50-day average
-        "rsi_reversion": 0.08,    # still has room before overbought
+        "mom_12_1": 0.30,         # established 12-1 month uptrend (the workhorse)
+        "mom_3m": 0.15,           # recent acceleration
+        "trend_200d": 0.10,       # above its long-term average
+        "earnings_growth": 0.20,  # revenue/earnings inflecting up = the catalyst
+        "quality": 0.10,          # balance-sheet strength
+        "profitability": 0.05,    # positive/improving margins
+        "value": 0.10,            # mild value tilt — don't overpay
     },
 }
 

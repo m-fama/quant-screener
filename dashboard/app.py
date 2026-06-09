@@ -474,10 +474,25 @@ with tab_trust:
         "**if you'd bought the names this tool rated highly and avoided the ones "
         "it rated poorly, would you have come out ahead?**"
     )
+    pit = (
+        pipeline.horizon_needs_fundamentals(horizon)
+        and universe_name != "ngx"
+        and universe_name not in universe_mod.PRICE_ONLY
+    )
+    if pit:
+        st.caption(
+            "This strategy uses fundamentals, so the check runs in **point-in-time "
+            "mode** — it rebuilds each past month using only the SEC filings that "
+            "existed back then (no cheating). First run downloads filings and can "
+            "take a few minutes; cached afterwards."
+        )
     if st.button("Run the history check"):
         with st.spinner("Replaying years of market history (takes a moment)..."):
             prices = load_prices(universe_name, period="5y")
-            res = walk_forward(prices, horizon=horizon)
+            res = walk_forward(
+                prices, horizon=horizon,
+                point_in_time=pit, tickers=list(prices.columns),
+            )
 
         win = res["ls_win_rate"]
         total = res["ls_total_return"]
