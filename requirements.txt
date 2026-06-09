@@ -1,0 +1,21 @@
+# Core data + numerics
+pandas>=2.2
+numpy>=1.26
+yfinance>=0.2.40        # free price + fundamentals (pluggable; swap for paid provider later)
+
+# Dashboard
+streamlit>=1.36
+plotly>=5.22
+matplotlib>=3.8         # required by pandas Styler.background_gradient (table shading)
+
+# News overlay (Phase 2) — all free / open source, no API keys
+vaderSentiment>=3.3.2   # lexicon sentiment, pure-Python, no model download
+lxml>=5.2               # for pandas.read_html (S&P 500 constituent scrape)
+
+# Utilities
+python-dateutil>=2.9
+requests>=2.32
+
+# --- Optional / later phases (not required for the MVP) ---
+# pandas-ta-classic    # 190+ technical indicators (Python 3.10-3.12 friendly)
+# pyqlib               # Microsoft Qlib factor/ML backbone (needs its own venv)
