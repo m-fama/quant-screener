@@ -50,8 +50,8 @@ def _forward_return(prices: pd.DataFrame, start_idx: int, horizon_days: int) -> 
 def walk_forward(
     prices: pd.DataFrame,
     horizon: str,
-    rebalance_days: int = 21,
-    holding_days: int = 21,
+    rebalance_days: int | None = None,
+    holding_days: int | None = None,
     quantile: float = 0.2,
     cost_bps: float = 10.0,
     warmup: int = 252,
@@ -61,10 +61,20 @@ def walk_forward(
     """Run the walk-forward test. Returns a dict of summary stats + the IC series
     and the long-short equity curve.
 
+    Holding/rebalance default to the strategy's own horizon (config.HOLDING_DAYS)
+    with NON-overlapping windows (rebalance == hold), so the test reflects how the
+    strategy is actually meant to be held and the compounded total return is real
+    (no overlap inflation).
+
     If `point_in_time` is True, fundamental factors are added at each rebalance
     date using ONLY SEC filings filed on or before that date (no lookahead),
     enabling an honest test of the full (price + fundamentals) strategy.
     """
+    if holding_days is None:
+        holding_days = config.HOLDING_DAYS.get(horizon, 21)
+    if rebalance_days is None:
+        rebalance_days = holding_days  # non-overlapping windows = honest totals
+
     ics: list[float] = []
     ls_returns: list[float] = []
     dates: list = []
@@ -161,8 +171,10 @@ def main() -> None:
         "--horizon", default="mid",
         choices=["short", "mid", "long", "value", "emerging"],
     )
-    ap.add_argument("--holding-days", type=int, default=21)
-    ap.add_argument("--rebalance-days", type=int, default=21)
+    ap.add_argument("--holding-days", type=int, default=None,
+                    help="override the strategy's natural hold (config.HOLDING_DAYS)")
+    ap.add_argument("--rebalance-days", type=int, default=None,
+                    help="override rebalance cadence (defaults to holding = non-overlapping)")
     ap.add_argument("--cost-bps", type=float, default=10.0)
     ap.add_argument(
         "--point-in-time", action="store_true",

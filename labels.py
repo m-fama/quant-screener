@@ -36,20 +36,25 @@ FACTOR_LABELS: dict[str, tuple[str, str]] = {
 # Horizon descriptions
 # ---------------------------------------------------------------------------
 HORIZON_LABELS: dict[str, str] = {
-    "short": "Quick trades (days to weeks)",
+    "short": "Quick trades (days to ~2 weeks)",
     "mid": "Medium term (weeks to months)",
-    "long": "Long-term hold (months to years)",
-    "value": "Value / Mispriced (contrarian)",
+    "long": "Long-term hold (~6 months+)",
+    "value": "Value (cheap but working)",
     "emerging": "Emerging / Early movers (12-month upside)",
 }
 
 HORIZON_BLURB: dict[str, str] = {
-    "short": "Built for fast moves — leans on recent price action and steadiness.",
-    "mid": "A balanced mix of price trend, profit growth and company quality.",
-    "long": "Built for patient investors — favours good value, quality and steady businesses.",
-    "value": "Hunts beaten-down names near their lows with improving fundamentals — "
-             "cheap, oversold, low debt, growing revenue. Aims for mispriced assets, "
-             "not falling knives.",
+    "short": "A fast trend-follower — buys names already moving up and trading "
+             "above their averages, calmer ones preferred. Backtested positive "
+             "over a ~2-week hold.",
+    "mid": "A balanced mix of price trend, profit growth and company quality — "
+           "the workhorse, and the strongest performer in backtesting.",
+    "long": "Quality value held for the long run — strong, profitable businesses "
+            "bought at a reasonable price, with the market already agreeing "
+            "(momentum confirmation so it skips value traps).",
+    "value": "Cheap-but-working: undervalued names that are ALSO high quality and "
+             "starting to turn up. Leads with cheapness but demands quality and "
+             "momentum confirmation, so it skips falling knives.",
     "emerging": "Growth names already trending up with improving earnings, bought "
                 "at a still-reasonable price (momentum + growth + quality). "
                 "Backtested to beat a deep-value/contrarian approach, which caught "

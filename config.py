@@ -35,17 +35,22 @@ FUNDAMENTALS_FALLBACK = True
 #
 # Factor keys must match those produced in factors.py.
 HORIZONS: dict[str, dict[str, float]] = {
-    # Days to a few weeks: technicals dominate, fundamentals barely matter.
+    # Days to ~2 weeks: a fast trend/momentum follower. The original mix paired
+    # short-term momentum WITH RSI mean-reversion (buy oversold) — the two fight
+    # each other, and point-in-time tests showed it lost. Re-tuned to pure
+    # short-window trend-following (validated IC ~+0.02, positive L/S at a ~10d
+    # hold). No fundamentals — they barely matter over days.
     "short": {
-        "mom_1m": 0.20,          # short-term momentum
-        "mom_3m": 0.15,
-        "rsi_reversion": 0.20,   # buy oversold / fade overbought
-        "trend_50d": 0.15,       # above/below 50d MA
+        "mom_3m": 0.25,          # recent 3-month momentum
+        "trend_50d": 0.20,       # above its 2-month average
+        "trend_200d": 0.15,      # above its long-term average (trend intact)
+        "mom_12_1": 0.15,        # broader uptrend behind the move
+        "above_52w_low": 0.15,   # off its lows, not bottom-fishing
         "vol_inv": 0.10,         # prefer calmer names (risk control)
-        "liquidity": 0.10,       # tradeable size
-        "above_52w_low": 0.10,
     },
     # Weeks to a few months: classic medium-term momentum + a quality tilt.
+    # The workhorse — validated strongest of all strategies (large-cap IC ~+0.02,
+    # 66% hit rate, +15% L/S at a ~21d hold).
     "mid": {
         "mom_12_1": 0.30,        # 12-1 month momentum (the workhorse factor)
         "mom_3m": 0.10,
@@ -55,25 +60,30 @@ HORIZONS: dict[str, dict[str, float]] = {
         "vol_inv": 0.05,
         "value": 0.10,
     },
-    # Months to years: value + quality + low-vol; momentum is a minor tilt.
+    # Months to years: "quality value held long." The original value + low-vol
+    # lead was strongly ANTI-predictive in the 2021-2026 large-cap regime
+    # (point-in-time IC ~-0.03, t ~-2.4). Re-tuned to lead with quality and add a
+    # long-momentum confirmation so it buys good, reasonably-priced businesses
+    # that are actually working — validated IC ~+0.05, t ~+3.1, 76% hit at ~126d.
     "long": {
-        "value": 0.30,
-        "quality": 0.25,
-        "vol_inv": 0.15,         # low-volatility anomaly
-        "profitability": 0.15,
-        "mom_12_1": 0.10,
-        "earnings_growth": 0.05,
+        "quality": 0.30,          # strong, well-run businesses first
+        "mom_12_1": 0.25,         # confirmation the market agrees (no value traps)
+        "value": 0.20,            # still reasonably priced
+        "profitability": 0.15,    # healthy, durable margins
+        "earnings_growth": 0.10,  # growing
     },
-    # Contrarian / mispriced: beaten-down names near their lows WITH improving
-    # fundamentals (cheap, oversold, low debt, growing). Designed to find value,
-    # not catch falling knives — hence the heavy weight on quality + growth.
+    # Cheap-but-working value (a few months). The original "buy near 52-week lows
+    # + oversold" version caught falling knives and lost. Re-tuned to lead with
+    # cheapness BUT require quality and recent/long-term momentum confirmation so
+    # it skips names that are still bleeding — validated IC ~+0.03, 67% hit,
+    # positive L/S at ~63d.
     "value": {
-        "near_52w_low": 0.20,     # close to the 52-week low
-        "rsi_reversion": 0.15,    # oversold (low RSI)
-        "value": 0.20,            # cheap on fundamentals
-        "quality": 0.15,          # strong balance sheet / low debt
+        "value": 0.25,            # cheap on fundamentals (leads)
+        "quality": 0.20,          # strong balance sheet / low debt
+        "mom_12_1": 0.15,         # the market is starting to agree
         "earnings_growth": 0.15,  # growing revenue & earnings
         "profitability": 0.15,    # positive, improving margins
+        "trend_200d": 0.10,       # above its long-term average (not a knife)
     },
     # Emerging / early movers: companies ALREADY trending up with improving
     # fundamentals, bought at a still-reasonable price. This is the momentum +
@@ -113,6 +123,18 @@ FACTOR_DIRECTION: dict[str, int] = {
     "quality": +1,
     "profitability": +1,
     "value": +1,           # composite already oriented (higher = cheaper)
+}
+
+# Holding period (trading days) each strategy is designed for. The validator
+# tests every strategy over ITS OWN horizon, with non-overlapping windows
+# (rebalance == hold), so backtest results reflect how the strategy is actually
+# meant to be held instead of forcing everything into a 1-month box.
+HOLDING_DAYS: dict[str, int] = {
+    "short": 10,    # ~2 weeks
+    "mid": 21,      # ~1 month
+    "long": 126,    # ~6 months
+    "value": 63,    # ~3 months
+    "emerging": 63, # ~3 months (a slice of the 6-12 month thesis)
 }
 
 # Winsorisation: clip cross-sectional z-scores to +/- this many std devs so a

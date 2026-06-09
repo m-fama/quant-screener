@@ -506,7 +506,7 @@ with tab_trust:
         c1, c2, c3 = st.columns(3)
         c1.metric("How often the favorites won", f"{win:.0%}" if win == win else "—")
         c2.metric("Total head-start vs. the rejects", f"{total:+.0%}" if total == total else "—")
-        c3.metric("Months tested", res["n_periods"])
+        c3.metric("Test periods", res["n_periods"])
 
         eq = res["equity_curve"]
         if len(eq):
