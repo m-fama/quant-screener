@@ -69,6 +69,21 @@ HORIZONS: dict[str, dict[str, float]] = {
         "earnings_growth": 0.15,  # growing revenue & earnings
         "profitability": 0.15,    # positive, improving margins
     },
+    # Emerging / early movers: severely undervalued names that are JUST starting
+    # to wake up. Blends a cheap, beaten-down entry (value + near-low) with
+    # *improving fundamentals* (the real catalyst) and *early price confirmation*
+    # (3-month momentum + a turn-up above the 50-day). The momentum tilt is what
+    # separates "ready for take-off" from "value trap stuck at the bottom".
+    "emerging": {
+        "near_52w_low": 0.12,     # undervalued entry, near the lows
+        "value": 0.15,            # cheap vs. fundamentals
+        "earnings_growth": 0.22,  # revenue/earnings inflecting up = the catalyst
+        "profitability": 0.10,    # margins turning positive
+        "quality": 0.08,          # enough balance-sheet strength to survive
+        "mom_3m": 0.18,           # early price confirmation (waking up)
+        "trend_50d": 0.07,        # reclaiming its 50-day average
+        "rsi_reversion": 0.08,    # still has room before overbought
+    },
 }
 
 # Direction of each factor: +1 means higher raw value is better, -1 means lower

@@ -55,8 +55,27 @@ ETFS_CORE = [
     "GLD", "SLV", "VNQ", "ARKK", "ICLN", "IBIT",
 ]
 
-# Cache file for scraped S&P 500 membership.
+# Commodities & metals, expressed via liquid ETFs/ETNs (free, clean, tradeable).
+# Avoids futures-symbol messiness while still covering the asset class.
+COMMODITIES = [
+    # Broad commodity baskets
+    "DBC", "GSG", "PDBC", "COMT",
+    # Precious metals (+ miners)
+    "GLD", "IAU", "SLV", "PPLT", "PALL", "GDX", "GDXJ", "SIL",
+    # Energy
+    "USO", "BNO", "UNG", "UGA",
+    # Industrial / base metals (+ miners)
+    "CPER", "COPX", "DBB", "XME", "PICK", "SLX",
+    # Future / battery metals
+    "LIT", "URA", "URNM", "REMX",
+    # Agriculture
+    "DBA", "WEAT", "CORN", "SOYB", "MOO",
+]
+
+# Cache files for scraped index membership.
 _SP500_CACHE = config.CACHE_DIR / "sp500_constituents.json"
+_SP400_CACHE = config.CACHE_DIR / "sp400_constituents.json"
+_SP600_CACHE = config.CACHE_DIR / "sp600_constituents.json"
 
 # Minimal hard-coded fallback so the tool still works fully offline / if the
 # Wikipedia scrape fails. Not exhaustive — the live scrape returns all ~500.
@@ -69,51 +88,105 @@ _SP500_FALLBACK = sorted(set(STOCKS_CORE + [
 ]))
 
 
-def get_sp500(force: bool = False) -> list[str]:
-    """Return the current S&P 500 tickers, scraped free from Wikipedia and cached.
+def _scrape_wiki_symbols(url: str, cache_file, min_expected: int) -> list[str] | None:
+    """Scrape a Wikipedia 'List of S&P xxx companies' table's Symbol column.
 
-    Falls back to a bundled static list if the network scrape is unavailable.
+    Returns a cached list if available, else scrapes + caches. Returns None only
+    if both the cache and the live scrape fail (caller supplies a fallback).
     """
-    if _SP500_CACHE.exists() and not force:
+    if cache_file.exists():
         try:
-            return json.loads(_SP500_CACHE.read_text())
+            return json.loads(cache_file.read_text())
         except Exception:
             pass
-
     try:
         import io
 
         import pandas as pd
         import requests
 
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        # Wikipedia 403s the default urllib UA, so fetch via requests with a
-        # browser-like header, then parse the HTML.
+        # Wikipedia 403s the default urllib UA; use a browser-like header.
         html = requests.get(
             url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (quant-screener)"}
         ).text
-        tables = pd.read_html(io.StringIO(html))
-        syms = tables[0]["Symbol"].astype(str).str.replace(".", "-", regex=False)
-        tickers = sorted(set(syms.tolist()))
-        if len(tickers) > 400:
-            _SP500_CACHE.write_text(json.dumps(tickers))
-            return tickers
+        for tbl in pd.read_html(io.StringIO(html)):
+            col = next((c for c in tbl.columns if str(c).lower() in
+                        ("symbol", "ticker", "ticker symbol")), None)
+            if col is None:
+                continue
+            syms = tbl[col].astype(str).str.replace(".", "-", regex=False)
+            tickers = sorted({s for s in syms.tolist() if s and s.isascii()
+                              and 1 <= len(s) <= 6 and s.upper() == s})
+            if len(tickers) >= min_expected:
+                cache_file.write_text(json.dumps(tickers))
+                return tickers
     except Exception:
         pass
+    return None
 
-    return _SP500_FALLBACK
 
+def get_sp500(force: bool = False) -> list[str]:
+    """Current S&P 500 tickers, scraped free from Wikipedia and cached.
+    Falls back to a bundled static list if the network scrape is unavailable."""
+    if force and _SP500_CACHE.exists():
+        _SP500_CACHE.unlink()
+    syms = _scrape_wiki_symbols(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        _SP500_CACHE, min_expected=400,
+    )
+    return syms if syms else _SP500_FALLBACK
+
+
+def get_sp400() -> list[str]:
+    """S&P MidCap 400 constituents (free Wikipedia scrape). Empty list on failure."""
+    return _scrape_wiki_symbols(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies",
+        _SP400_CACHE, min_expected=300,
+    ) or []
+
+
+def get_sp600() -> list[str]:
+    """S&P SmallCap 600 constituents (free Wikipedia scrape). Empty list on failure."""
+    return _scrape_wiki_symbols(
+        "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies",
+        _SP600_CACHE, min_expected=400,
+    ) or []
+
+
+def get_sp1500() -> list[str]:
+    """All US Stocks proxy: S&P 1500 (large + mid + small cap) + popular names."""
+    return sorted(set(get_sp500() + get_sp400() + get_sp600() + POPULAR_EXTRA))
+
+
+def get_emerging() -> list[str]:
+    """'Emerging' pool: small/mid-cap real companies where undervalued early
+    movers actually live — S&P 400 + 600 + popular high-interest mid-caps,
+    deliberately EXCLUDING the mega-cap S&P 500 (already well-discovered)."""
+    small_mid = set(get_sp400() + get_sp600() + POPULAR_EXTRA)
+    big = set(get_sp500())
+    pool = sorted(small_mid - big)
+    # Fallback: if the mid/small scrapes failed, lean on popular mid-caps.
+    return pool if len(pool) >= 50 else sorted(set(POPULAR_EXTRA))
+
+
+# Universes whose constituents are price-only (no per-company fundamentals).
+PRICE_ONLY = {"etfs", "commodities"}
 
 UNIVERSES: dict[str, list[str]] = {
     "stocks": sorted(set(STOCKS_CORE + POPULAR_EXTRA)),
     "etfs": ETFS_CORE,
+    "commodities": COMMODITIES,
     "all": sorted(set(STOCKS_CORE + POPULAR_EXTRA + ETFS_CORE)),
 }
 
 
 def get_universe(name: str) -> list[str]:
-    """Resolve a universe name to a ticker list. 'sp500'/'sp500+etfs' and 'ngx'
-    are resolved dynamically (scraped + cached)."""
+    """Resolve a universe name to a ticker list. Index-based and market-based
+    universes are resolved dynamically (scraped + cached)."""
+    if name in ("us_all", "sp1500"):
+        return get_sp1500()
+    if name == "emerging":
+        return get_emerging()
     if name == "sp500":
         return get_sp500()
     if name == "sp500+etfs":
@@ -126,6 +199,6 @@ def get_universe(name: str) -> list[str]:
     if name not in UNIVERSES:
         raise ValueError(
             f"Unknown universe '{name}'. Options: "
-            f"{list(UNIVERSES) + ['sp500', 'sp500+etfs', 'sp500+popular', 'ngx']}"
+            f"{list(UNIVERSES) + ['us_all', 'emerging', 'sp500', 'sp500+etfs', 'sp500+popular', 'ngx']}"
         )
     return UNIVERSES[name]

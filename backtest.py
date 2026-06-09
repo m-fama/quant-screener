@@ -126,10 +126,14 @@ def walk_forward(
 def main() -> None:
     ap = argparse.ArgumentParser(description="Walk-forward factor validation")
     ap.add_argument(
-        "--universe", default="all",
-        choices=["stocks", "etfs", "all", "sp500", "sp500+etfs", "sp500+popular", "ngx"],
+        "--universe", default="us_all",
+        choices=["us_all", "emerging", "etfs", "commodities", "ngx",
+                 "stocks", "all", "sp500", "sp500+etfs", "sp500+popular"],
     )
-    ap.add_argument("--horizon", default="mid", choices=["short", "mid", "long", "value"])
+    ap.add_argument(
+        "--horizon", default="mid",
+        choices=["short", "mid", "long", "value", "emerging"],
+    )
     ap.add_argument("--holding-days", type=int, default=21)
     ap.add_argument("--rebalance-days", type=int, default=21)
     ap.add_argument("--cost-bps", type=float, default=10.0)

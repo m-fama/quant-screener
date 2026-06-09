@@ -14,9 +14,7 @@ import argparse
 import pandas as pd
 
 import config
-import data_loader
-import factors
-import scoring
+import pipeline
 import universe as universe_mod
 
 pd.set_option("display.width", 200)
@@ -30,24 +28,10 @@ def run(
     refresh: bool,
     with_news: bool = False,
 ):
-    prov = data_loader.provider_for(universe_name)
-    tickers = universe_mod.get_universe(universe_name)
-
-    print(f"Loading data for {len(tickers)} tickers ({universe_name})...")
-    prices = prov.get_prices(
-        tickers, period="3y", universe_key=universe_name, force=refresh
-    )
-    volume = prov.get_volume(tickers, period="6mo")
-
-    # ETFs / NGX have no usable fundamentals; skip that fetch.
-    if universe_name in ("etfs", "ngx"):
-        fundamentals = None
-    else:
-        print("Loading fundamentals (cached after first run)...")
-        fundamentals = prov.get_fundamentals(tickers, force=refresh)
-
-    table = factors.build_factor_table(prices, fundamentals=fundamentals, volume=volume)
-    scored = scoring.score(table, horizon=horizon)
+    n = len(universe_mod.get_universe(universe_name))
+    print(f"Screening {n} tickers ({universe_name}) — price screen, then "
+          "fundamentals on the finalists...")
+    scored = pipeline.build_scored(universe_name, horizon, refresh=refresh)
 
     if with_news:
         import news as news_mod
@@ -61,10 +45,14 @@ def run(
 def main() -> None:
     ap = argparse.ArgumentParser(description="Evidence-based stock/ETF screener")
     ap.add_argument(
-        "--universe", default="all",
-        choices=["stocks", "etfs", "all", "sp500", "sp500+etfs", "sp500+popular", "ngx"],
+        "--universe", default="us_all",
+        choices=["us_all", "emerging", "etfs", "commodities", "ngx",
+                 "stocks", "all", "sp500", "sp500+etfs", "sp500+popular"],
     )
-    ap.add_argument("--horizon", default="mid", choices=["short", "mid", "long", "value"])
+    ap.add_argument(
+        "--horizon", default="mid",
+        choices=["short", "mid", "long", "value", "emerging"],
+    )
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--refresh", action="store_true", help="bypass cache")
     ap.add_argument("--news", action="store_true", help="add free news/sentiment tilt")

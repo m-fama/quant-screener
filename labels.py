@@ -40,6 +40,7 @@ HORIZON_LABELS: dict[str, str] = {
     "mid": "Medium term (weeks to months)",
     "long": "Long-term hold (months to years)",
     "value": "Value / Mispriced (contrarian)",
+    "emerging": "Emerging / Early movers (12-month upside)",
 }
 
 HORIZON_BLURB: dict[str, str] = {
@@ -49,16 +50,23 @@ HORIZON_BLURB: dict[str, str] = {
     "value": "Hunts beaten-down names near their lows with improving fundamentals — "
              "cheap, oversold, low debt, growing revenue. Aims for mispriced assets, "
              "not falling knives.",
+    "emerging": "Catches early movers before the crowd: severely undervalued names "
+                "with improving profits that are *just starting to turn up*. Blends a "
+                "cheap entry with the catalyst (growth) and early price confirmation.",
 }
 
 UNIVERSE_LABELS: dict[str, str] = {
+    "us_all": "🇺🇸 All US Stocks (incl. S&P 500)",
+    "etfs": "📦 ETFs & Funds",
+    "emerging": "🚀 Emerging Stocks (undervalued early movers)",
+    "commodities": "🛢️ Commodities & Metals",
+    "ngx": "🇳🇬 Nigerian Exchange (NGX)",
+    # Legacy keys (still usable from the CLI):
     "all": "🇺🇸 Popular US stocks + ETFs",
     "stocks": "🇺🇸 Popular large US stocks",
-    "etfs": "🇺🇸 ETFs & funds",
     "sp500": "🇺🇸 S&P 500 (500 biggest US companies)",
     "sp500+etfs": "🇺🇸 S&P 500 + ETFs/funds",
-    "sp500+popular": "🇺🇸 S&P 500 + popular mid-caps (widest US net)",
-    "ngx": "🇳🇬 Nigerian Exchange (NGX) — all listed companies",
+    "sp500+popular": "🇺🇸 S&P 500 + popular mid-caps",
 }
 
 

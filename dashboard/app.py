@@ -24,11 +24,9 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import config  # noqa: E402
 import data_loader  # noqa: E402
-import factors  # noqa: E402
 import labels  # noqa: E402
-import scoring  # noqa: E402
+import pipeline  # noqa: E402
 import universe as universe_mod  # noqa: E402
 from backtest import walk_forward  # noqa: E402
 
@@ -66,20 +64,16 @@ _check_password()
 
 
 @st.cache_data(ttl=60 * 60 * 3, show_spinner=False)
-def load_factor_table(universe_name: str) -> pd.DataFrame:
-    prov = data_loader.provider_for(universe_name)
-    tickers = universe_mod.get_universe(universe_name)
-    prices = prov.get_prices(tickers, period="3y", universe_key=universe_name)
-    volume = prov.get_volume(tickers, period="6mo")
-    fundamentals = None if universe_name == "etfs" else prov.get_fundamentals(tickers)
-    return factors.build_factor_table(prices, fundamentals=fundamentals, volume=volume)
+def load_scored(universe_name: str, horizon: str) -> pd.DataFrame:
+    """Two-stage funnel: price screen on the full universe, then fundamentals
+    on the finalists. Cached per (universe, horizon)."""
+    return pipeline.build_scored(universe_name, horizon)
 
 
 @st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
-def load_names(universe_name: str) -> dict:
+def load_names(universe_name: str, tickers: tuple) -> dict:
     prov = data_loader.provider_for(universe_name)
-    tickers = universe_mod.get_universe(universe_name)
-    return prov.get_names(tickers)
+    return prov.get_names(list(tickers))
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
@@ -98,14 +92,14 @@ def load_sectors(universe_name: str) -> dict:
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
-def load_signals(universe_name: str) -> pd.DataFrame:
-    """Context-only signals (short interest, days-to-earnings). Never scored."""
-    if universe_name == "etfs":
+def load_signals(universe_name: str, tickers: tuple) -> pd.DataFrame:
+    """Context-only signals (short interest, days-to-earnings). Never scored.
+    Scoped to the finalists so we don't hammer the data source."""
+    if universe_name in universe_mod.PRICE_ONLY:
         return pd.DataFrame()
     prov = data_loader.provider_for(universe_name)
-    tickers = universe_mod.get_universe(universe_name)
     try:
-        return prov.get_signals(tickers)
+        return prov.get_signals(list(tickers))
     except Exception:
         return pd.DataFrame()
 
@@ -121,16 +115,26 @@ st.sidebar.title("Quant Screener")
 
 universe_name = st.sidebar.selectbox(
     "What should we look at?",
-    ["all", "stocks", "etfs", "sp500", "sp500+etfs", "sp500+popular", "ngx"],
-    index=0,
+    ["us_all", "etfs", "emerging", "commodities", "ngx"],
+    index=2,  # default to Emerging — the early-mover lens
     format_func=lambda u: labels.UNIVERSE_LABELS.get(u, u),
-    help="The S&P 500 lists load ~500 companies the first time and may take a "
-         "few minutes; saved afterwards so it's fast next time. For hunting "
-         "undervalued names, use 'S&P 500 + popular mid-caps' with the "
-         "'Value / Mispriced' strategy.",
+    help="🚀 Emerging Stocks hunts undervalued small/mid-caps that are starting "
+         "to move — the early-mover lens. All US Stocks scans the full S&P 1500 "
+         "(loads once, ~1-2 min the first time, then cached).",
 )
 
-if universe_name == "ngx":
+if universe_name == "emerging":
+    st.sidebar.success(
+        "🚀 **Emerging Stocks** — beaten-down small & mid-caps (outside the "
+        "mega-caps) where early movers live. Pair with the **Emerging / Early "
+        "movers** strategy below for the 'undervalued and ready to take off' screen."
+    )
+elif universe_name == "us_all":
+    st.sidebar.caption(
+        "Scanning the full S&P 1500 (large + mid + small cap). First load takes "
+        "~1-2 min while data is fetched, then it's cached and fast."
+    )
+elif universe_name == "ngx":
     st.sidebar.info(
         "🇳🇬 Nigerian market — prices in Naira (₦), possibly slightly delayed. "
         "Full price history + sector data available, so trend-based ratings and "
@@ -139,10 +143,18 @@ if universe_name == "ngx":
         "limited here — favour **Quick** and **Medium** horizons."
     )
 
+# Strategy — auto-default to 'Emerging' when the Emerging universe is picked,
+# while still letting the user override afterwards.
+_strats = ["short", "mid", "long", "value", "emerging"]
+if st.session_state.get("_last_universe") != universe_name:
+    st.session_state["_last_universe"] = universe_name
+    st.session_state["strategy_select"] = (
+        "emerging" if universe_name == "emerging" else "mid"
+    )
 horizon = st.sidebar.selectbox(
     "Strategy",
-    ["short", "mid", "long", "value"],
-    index=1,
+    _strats,
+    key="strategy_select",
     format_func=lambda h: labels.HORIZON_LABELS[h],
 )
 st.sidebar.info(labels.HORIZON_BLURB[horizon])
@@ -169,12 +181,14 @@ st.caption(
     "price trend, value, quality and steadiness, scored side by side."
 )
 
-with st.spinner("Crunching the numbers..."):
-    table = load_factor_table(universe_name)
-    names = load_names(universe_name)
+with st.spinner("Crunching the numbers... (first load of a big universe can take a minute)"):
+    scored = load_scored(universe_name, horizon)
+    # Names/signals only matter for the names a user can actually see, so scope
+    # them to the top finalists (avoids mass per-company calls on big universes).
+    finalists = tuple(scored.head(100).index)
+    names = load_names(universe_name, finalists)
     sectors = load_sectors(universe_name)
-    signals = load_signals(universe_name)
-    scored = scoring.score(table, horizon=horizon)
+    signals = load_signals(universe_name, finalists)
 
 
 def signal_for(ticker: str):
@@ -294,7 +308,7 @@ max-width:22vw;display:inline-block;vertical-align:middle;overflow:hidden;margin
 # Tab 2 — Why this pick?
 # ---------------------------------------------------------------------------
 with tab_why:
-    options = scored.index.tolist()
+    options = list(finalists)
     pick = st.selectbox(
         "Pick a company or fund",
         options,

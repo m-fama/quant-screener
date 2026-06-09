@@ -118,6 +118,55 @@ def _fund_cache_path() -> "config.Path":
     return config.CACHE_DIR / "fundamentals.json"
 
 
+def _make_session():
+    """A browser-impersonating session avoids Yahoo's bot/crumb rejections.
+    Falls back to None (yfinance's default) if curl_cffi isn't available."""
+    try:
+        from curl_cffi import requests as cffi
+        return cffi.Session(impersonate="chrome")
+    except Exception:
+        return None
+
+
+def _fetch_fundamentals(to_fetch: list[str]) -> dict[str, dict]:
+    """Fetch raw fundamentals for tickers with modest concurrency + backoff."""
+    import random
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    _local = threading.local()
+
+    def _session():
+        s = getattr(_local, "s", None)
+        if s is None:
+            s = _make_session()
+            _local.s = s
+        return s
+
+    def _fetch_one(t: str) -> tuple[str, dict]:
+        info: dict = {}
+        for attempt in range(4):
+            try:
+                sess = _session()
+                tk = yf.Ticker(t, session=sess) if sess is not None else yf.Ticker(t)
+                info = tk.info or {}
+            except Exception:
+                info = {}
+            # A real payload carries a name; missing => throttled/blocked.
+            if info.get("shortName") or info.get("longName"):
+                break
+            time.sleep((2 ** attempt) * 0.6 + random.random())
+            _local.s = None  # rotate the session on failure
+        return t, {f: info.get(f) for f in _FUND_FIELDS}
+
+    rows: dict[str, dict] = {}
+    # Low concurrency on purpose: gentler on the endpoint than a big thread pool.
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        for t, row in ex.map(_fetch_one, to_fetch):
+            rows[t] = row
+    return rows
+
+
 def get_fundamentals(tickers: list[str], force: bool = False) -> pd.DataFrame:
     """Return a DataFrame indexed by ticker with the fields in `_FUND_FIELDS`.
 
@@ -140,13 +189,12 @@ def get_fundamentals(tickers: list[str], force: bool = False) -> pd.DataFrame:
         if t not in cached or not _req.issubset(cached[t].keys())
     ]
 
-    for t in to_fetch:
-        try:
-            info = yf.Ticker(t).info or {}
-        except Exception:
-            info = {}
-        rows[t] = {f: info.get(f) for f in _FUND_FIELDS}
-        time.sleep(0.05)  # be polite to the endpoint
+    # The pipeline funnels fundamentals down to ~150 finalists, so we can afford
+    # to be polite: a browser-impersonating session (curl_cffi) keeps Yahoo from
+    # throwing "Invalid Crumb" / "Too Many Requests", and exponential backoff
+    # rides out any transient throttling instead of caching empty rows.
+    if to_fetch:
+        rows.update(_fetch_fundamentals(to_fetch))
 
     merged = {**cached, **rows}
     cache.write_text(json.dumps(merged))
