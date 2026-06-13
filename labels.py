@@ -45,16 +45,18 @@ HORIZON_LABELS: dict[str, str] = {
 
 HORIZON_BLURB: dict[str, str] = {
     "short": "A fast trend-follower — buys names already moving up and trading "
-             "above their averages, calmer ones preferred. Backtested positive "
-             "over a ~2-week hold.",
-    "mid": "A balanced mix of price trend, profit growth and company quality — "
-           "the workhorse, and the strongest performer in backtesting.",
+             "above their averages, calmer ones preferred. Best used as a timing "
+             "aid: backtests show the short-term edge is inconsistent.",
+    "mid": "A balanced mix of price trend, profit growth and company quality. "
+           "Strong in recent years, but factor edges are regime-dependent — see "
+           "the 'Can we trust this?' tab.",
     "long": "Quality value held for the long run — strong, profitable businesses "
-            "bought at a reasonable price, with the market already agreeing "
-            "(momentum confirmation so it skips value traps).",
+            "bought at a reasonable price, with the market already agreeing. A "
+            "sensible tilt, but its long-run edge is unproven (a 6-month hold is "
+            "hard to validate).",
     "value": "Cheap-but-working: undervalued names that are ALSO high quality and "
-             "starting to turn up. Leads with cheapness but demands quality and "
-             "momentum confirmation, so it skips falling knives.",
+             "starting to turn up. The most consistent strategy in backtesting, "
+             "though the edge is modest.",
     "emerging": "Growth names already trending up with improving earnings, bought "
                 "at a still-reasonable price (momentum + growth + quality). "
                 "Backtested to beat a deep-value/contrarian approach, which caught "
@@ -213,3 +215,85 @@ def earnings_note(days_to_earnings) -> str:
             "consider waiting until after, or sizing smaller."
         )
     return f"Next earnings in ~{d} days — no immediate event risk."
+
+
+# ---------------------------------------------------------------------------
+# Devil's advocate / bear case (rule-based, from the same data as the score)
+# ---------------------------------------------------------------------------
+# How each factor reads as a RISK when it's a weak point for a given pick.
+_FACTOR_BEAR: dict[str, str] = {
+    "value": "It isn't cheap — you're paying a premium, so any stumble could be punished hard.",
+    "quality": "Balance-sheet quality is on the weaker side (more debt / thinner margins), which makes it fragile if conditions tighten.",
+    "profitability": "Margins are unremarkable — profitability could slip if costs rise or pricing power fades.",
+    "earnings_growth": "Earnings and sales growth are underwhelming — the fundamentals may not justify the price.",
+    "mom_12_1": "Its year-long price trend is weak — the market hasn't rewarded it, and that can persist.",
+    "mom_3m": "Recent momentum is soft — there's little buying pressure behind it right now.",
+    "mom_1m": "Short-term momentum is weak — near-term price action isn't supportive.",
+    "trend_50d": "It's below its ~2-month average — the short-term trend is working against you.",
+    "trend_200d": "It's below its long-term average — often a sign the broader trend is still down.",
+    "vol_inv": "It's a volatile name — expect sharp swings; one bad week can erase months of gains.",
+    "rsi_reversion": "It isn't oversold — there's no 'snap-back' cushion if it rolls over.",
+    "above_52w_low": "It's still close to its 52-week low — bottom-fishing here risks catching a falling knife.",
+    "near_52w_low": "It's near its 52-week low for a reason — cheap can always get cheaper.",
+    "liquidity": "It trades thinly — wider spreads and slippage hurt, and exits get harder in a panic.",
+}
+
+# The flip-side risk of each strategy's core bet.
+_HORIZON_BEAR: dict[str, str] = {
+    "short": "This is a short-term trend bet, and trends reverse without warning — fast names give back gains just as fast.",
+    "mid": "This leans on momentum, and crowded winners can unwind sharply when sentiment shifts.",
+    "long": "This is a quality-value bet — but if the market is right about the risks, 'cheap' can stay cheap for years (a value trap).",
+    "value": "This is a cheap-but-recovering bet, and the turnaround may not stick — many cheap stocks are cheap for good reason.",
+    "emerging": "This is a small/mid-cap early mover — higher-beta names that fall hardest in risk-off markets and can be hard to exit.",
+}
+
+
+def bear_case(row, horizon: str, short_pct=None, days_to_earnings=None,
+              risk_flags=None, n_factors: int = 3) -> list[str]:
+    """A deliberate devil's-advocate list: what could make this pick fail.
+
+    Built from the same evidence as the score — the pick's weakest factors, the
+    strategy's inherent risk, positioning/event flags, and any news red flags —
+    so it's honest by construction, not cheerleading.
+    """
+    points: list[str] = []
+
+    # 1) The pick's own weak spots (most negative factor contributions).
+    contribs = factor_contributions(row, horizon)
+    weak = [f for f, c in contribs if c < 0]
+    # If almost nothing is negative, fall back to its lowest-scoring factors.
+    if len(weak) < 2:
+        weak = [f for f, _ in sorted(contribs, key=lambda x: row.get(f"z_{x[0]}", 0.0))][:2]
+    for f in weak[:n_factors]:
+        msg = _FACTOR_BEAR.get(f)
+        if msg and msg not in points:
+            points.append(msg)
+
+    # 2) The flip-side of the strategy's core bet.
+    if horizon in _HORIZON_BEAR:
+        points.append(_HORIZON_BEAR[horizon])
+
+    # 3) Positioning / event risk (context flags, never part of the score).
+    if _isnum(short_pct) and short_pct >= _SHORT_ELEVATED:
+        points.append(
+            f"About {short_pct * 100:.0f}% of its tradeable shares are sold short — "
+            "sophisticated investors are actively betting it falls."
+        )
+    if _isnum(days_to_earnings) and 0 <= days_to_earnings <= _EARNINGS_SOON_DAYS:
+        d = int(round(days_to_earnings))
+        points.append(
+            f"Earnings land in ~{d} day(s) — a miss or weak guidance could gap the "
+            "price down overnight."
+        )
+
+    # 4) News-based red flags.
+    if risk_flags:
+        flags = ", ".join(sorted(set(risk_flags))[:5])
+        points.append(f"Recent headlines mention: {flags} — read them before buying.")
+
+    # 5) Universal humility — the rising/falling tide.
+    points.append(
+        "And the catch-all: this is a relative ranking, not a promise. In a broad "
+        "market selloff, even the best-ranked names usually fall."
+    )
+    return points

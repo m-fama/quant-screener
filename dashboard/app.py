@@ -104,6 +104,62 @@ def load_signals(universe_name: str, tickers: tuple) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+@st.cache_data(ttl=60 * 30, show_spinner=False)
+def load_one_news(ticker: str):
+    """Fetch + score recent free headlines for a SINGLE ticker (for the detail
+    view). Cached so flipping between picks stays snappy."""
+    try:
+        import news as news_mod
+        return news_mod.analyze_ticker(ticker)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
+def reference_links(ticker: str, universe_name: str) -> list[tuple]:
+    """Primary-source links for a pick: filings, financials, price history."""
+    t = ticker.upper()
+    if universe_name == "ngx":
+        return [
+            ("AFX — price & history", f"https://afx.kwayisi.org/ngx/{ticker.lower()}.html"),
+            ("NGX Group — listed companies", "https://ngxgroup.com/issuers/listed-securities/"),
+        ]
+    if universe_name in universe_mod.PRICE_ONLY:  # ETFs / commodities
+        return [
+            ("Yahoo Finance — overview", f"https://finance.yahoo.com/quote/{t}"),
+            ("Yahoo Finance — holdings", f"https://finance.yahoo.com/quote/{t}/holdings"),
+        ]
+    links = [
+        ("Yahoo Finance — overview", f"https://finance.yahoo.com/quote/{t}"),
+        ("Yahoo Finance — financials", f"https://finance.yahoo.com/quote/{t}/financials"),
+    ]
+    try:
+        import edgar_data
+        cik = edgar_data._cik_map().get(t)
+    except Exception:
+        cik = None
+    if cik:
+        base = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK="
+        links.append(("SEC — annual report (10-K)",
+                      f"{base}{cik}&type=10-K&dateb=&owner=include&count=10"))
+        links.append(("SEC — quarterly report (10-Q)",
+                      f"{base}{cik}&type=10-Q&dateb=&owner=include&count=10"))
+    return links
+
+
+# Shared mood styling for headlines (used by the detail + news tabs).
+_MOOD_MAP = {"positive": "🟢 Positive", "negative": "🔴 Negative",
+             "neutral": "🟡 Mixed", "no news": "⚪ No recent news"}
+
+
+def _headline_md(article) -> str:
+    """One headline as markdown with a tone dot and source link."""
+    tone = "🟢" if article.sentiment > 0.2 else "🔴" if article.sentiment < -0.2 else "⚪"
+    if article.link:
+        return f"{tone} [{article.title}]({article.link}) — *{article.publisher}*"
+    return f"{tone} {article.title} — *{article.publisher}*"
+
+
 def name_of(names: dict, ticker: str) -> str:
     return names.get(ticker, ticker)
 
@@ -358,6 +414,48 @@ with tab_why:
                 f"<span style='color:gray'>{expl}</span>",
                 unsafe_allow_html=True,
             )
+
+    # ---- Devil's advocate / bear case -------------------------------------
+    with st.spinner("Gathering evidence & headlines for this pick..."):
+        nv = load_one_news(pick)
+    risk_flags = nv.risk_flags if nv else None
+
+    st.divider()
+    st.markdown("#### 📉 The bear case — what could go wrong")
+    st.caption(
+        "A deliberate devil's-advocate view: the flip side of this pick, built "
+        "from its own weak spots and risk flags. Read it before you buy."
+    )
+    for b in labels.bear_case(row, horizon, short_pct=sp, days_to_earnings=dte,
+                              risk_flags=risk_flags):
+        st.markdown(f"- {b}")
+
+    # ---- References & evidence (sources right next to the pick) ------------
+    st.divider()
+    st.markdown("#### 🔗 References & evidence")
+
+    refs = reference_links(pick, universe_name)
+    if refs:
+        st.markdown("**Source documents & data**")
+        st.markdown(" &nbsp;•&nbsp; ".join(f"[{lbl}]({url})" for lbl, url in refs))
+
+    if nv and nv.n_articles:
+        mood = _MOOD_MAP.get(nv.label, "⚪")
+        warn = f" — ⚠️ {', '.join(nv.risk_flags)}" if nv.risk_flags else ""
+        st.markdown(
+            f"**Recent headlines** · {nv.n_articles} found · mood: {mood}{warn}"
+        )
+        for a in nv.articles[:8]:
+            st.markdown(_headline_md(a))
+        st.caption(
+            "Headlines from free sources (Yahoo Finance, Google News), tone scored "
+            "automatically. News only nudges the rating — the numbers lead."
+        )
+    else:
+        st.caption(
+            "No recent free headlines found for this name. The source links above "
+            "still let you check its latest filings and financials."
+        )
 
 # ---------------------------------------------------------------------------
 # Tab 3 — Latest news

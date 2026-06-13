@@ -48,11 +48,13 @@ Weights live in `config.py` (`HORIZONS`) — explicit and auditable.
 | **value** | ~3 months | cheap-but-working: leads with value, but demands quality + momentum confirmation so it skips falling knives |
 | **emerging** | ~3–6 months | early movers: already trending up with improving earnings, bought at a still-reasonable price (momentum + growth + quality) |
 
-These weights were **tuned against point-in-time backtests** (see below), not
+These weights were **shaped by point-in-time backtests** (see below), not
 hand-waved. Earlier versions of `short`/`long`/`value` paired momentum with
-mean-reversion / deep-value tilts that *fought each other* and tested negative;
-they were re-tuned to lead with the signals that actually validated (momentum +
-quality, with confirmation that a name isn't still falling).
+mean-reversion / deep-value tilts that *fought each other* and were actively
+anti-predictive; they were re-tuned to lead with momentum + quality and to
+require confirmation that a name isn't still falling. **That removed the
+self-sabotage, but read the validation section honestly — over a full cycle the
+large-cap edge is weak and regime-dependent.**
 
 ## Does it actually work? (validation)
 
@@ -65,37 +67,49 @@ non-overlapping windows** (`config.HOLDING_DAYS`), so a 6-month strategy is
 judged over 6 months — not crammed into a 1-month box — and the compounded
 total return is real (no overlap inflation).
 
-Latest run (~2021–2026, point-in-time fundamentals):
+It's tested over **two windows** on the S&P 500: the recent ~5 years, and the
+full ~16 years (2010–2026) that EDGAR's point-in-time financials cover. **The
+gap between them is the whole point** — it shows how much a strategy depends on
+the recent regime.
 
-| Strategy | Hold | S&P 500 (large-cap) | Emerging (small/mid-cap) |
-|----------|------|---------------------|--------------------------|
-| **mid**      | 21d  | IC +0.021, hit 66%, **L/S +15.4%** ✅ | IC +0.021, +0.9% (flat) |
-| **value**    | 63d  | IC +0.029, hit 60%, **L/S +20.8%** ✅ | IC +0.028, +1.3% |
-| **emerging** | 63d  | —                                     | IC +0.034, hit 73%, **L/S +4.4%** ✅ |
-| **short**    | 10d  | IC +0.004, ~flat (−0.4%) ⚠️           | — |
-| **long**     | 126d | IC +0.026, hit 86%, but only n=7 ⚠️   | — |
+| Strategy | Hold | Recent ~5y IC / L/S | Full ~16y IC / L/S |
+|----------|------|---------------------|--------------------|
+| **value**    | 63d  | +0.029 / **+20.8%** | +0.005 / **+8%**  |
+| **mid**      | 21d  | +0.021 / **+15.4%** | +0.003 / −43%      |
+| **long**     | 126d | +0.026 / −0.5% (n=7)| −0.011 / −13%     |
+| **short**    | 10d  | +0.004 / −0.4%      | −0.003 / −73%     |
+| **emerging** | 63d  | +0.034 / +4.4% (small/mid-cap) | not long-run tested* |
 
-**What this means, honestly:**
+\* the small/mid-cap universe is current-membership only, so a 16-year test
+would be too survivorship-biased to mean much.
 
-- The re-tune **flipped `short`/`long`/`value` from anti-predictive to
-  predictive** — every strategy now has a positive Information Coefficient,
-  where three of them used to be negative.
-- **`mid` (large caps), `value` (large caps) and `emerging` (small/mid caps)
-  are the clear, profitable performers** — lean on these.
-- **`short` is roughly break-even** now (up from −13%): a small positive edge
-  before costs, easily eaten by trading frictions. Treat it as a timing aid,
-  not an alpha engine.
-- **`long` is directionally positive** (IC +0.026, 86% of periods positive) but
-  there are only ~7 non-overlapping 6-month windows in 5 years — too few to
-  call statistically. A 6-month strategy simply can't be robustly validated on
-  5 years of history; treat it as promising-but-unproven.
-- These are **long/short factor spreads**, not a long-only portfolio's return,
-  and one ~5-year window is one regime. Re-run the validation before trusting
-  any configuration: `python backtest.py --universe sp500 --horizon value
-  --point-in-time`.
+**What this means, honestly — read this before trusting anything:**
 
-Re-validate any strategy from the **"Can we trust this?"** tab in the dashboard,
-or from the CLI (use `--point-in-time` for the fundamental strategies).
+- **Over a full cycle, simple long/short factor spreads on large-cap US stocks
+  have essentially no reliable edge.** Information Coefficients sit near zero;
+  only **`value` is marginally positive** across both windows. This matches the
+  academic consensus that mega-cap US factor premia have been largely
+  arbitraged away.
+- **The strong recent numbers (`mid` +15%, `value` +21%) are mostly a favorable
+  2021–2026 regime**, not a durable, all-weather edge. Don't extrapolate them.
+- These results even **flatter** reality: the universe is *today's* S&P 500
+  (survivors only), which biases backtests upward. The true edge is, if
+  anything, weaker.
+- So what's it actually good for? A **disciplined, evidence-aware ranking and
+  screening aid** — surfacing names with strong momentum/quality/value
+  characteristics and flagging risks — rather than a proven alpha machine.
+  Factor tilts historically work better **long-only in a rising market** (you
+  aren't really shorting 100 names) and in **broader/smaller-cap universes**
+  (the `emerging` / `us_all` lenses) than as a large-cap long/short.
+
+Re-run any of this yourself — that's what the layer is for:
+
+```bash
+python backtest.py --universe sp500 --horizon value --point-in-time            # recent 5y
+python backtest.py --universe sp500 --horizon long  --point-in-time --period max # full history
+```
+
+Or use the **"Can we trust this?"** tab in the dashboard.
 
 ## Universes
 

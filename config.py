@@ -37,9 +37,10 @@ FUNDAMENTALS_FALLBACK = True
 HORIZONS: dict[str, dict[str, float]] = {
     # Days to ~2 weeks: a fast trend/momentum follower. The original mix paired
     # short-term momentum WITH RSI mean-reversion (buy oversold) — the two fight
-    # each other, and point-in-time tests showed it lost. Re-tuned to pure
-    # short-window trend-following (validated IC ~+0.02, positive L/S at a ~10d
-    # hold). No fundamentals — they barely matter over days.
+    # each other and tested clearly negative. Re-tuned to pure short-window
+    # trend-following: ~break-even recently, still negative over a full cycle, so
+    # treat it as a timing aid, not alpha. No fundamentals (they barely matter
+    # over days).
     "short": {
         "mom_3m": 0.25,          # recent 3-month momentum
         "trend_50d": 0.20,       # above its 2-month average
@@ -49,8 +50,9 @@ HORIZONS: dict[str, dict[str, float]] = {
         "vol_inv": 0.10,         # prefer calmer names (risk control)
     },
     # Weeks to a few months: classic medium-term momentum + a quality tilt.
-    # The workhorse — validated strongest of all strategies (large-cap IC ~+0.02,
-    # 66% hit rate, +15% L/S at a ~21d hold).
+    # Strongest in the recent ~5y (large-cap IC ~+0.02, 66% hit, +15% L/S at ~21d)
+    # but ~flat over the full 2010-2026 sample — a regime-dependent edge, not an
+    # all-weather one. See the README validation section.
     "mid": {
         "mom_12_1": 0.30,        # 12-1 month momentum (the workhorse factor)
         "mom_3m": 0.10,
@@ -62,9 +64,11 @@ HORIZONS: dict[str, dict[str, float]] = {
     },
     # Months to years: "quality value held long." The original value + low-vol
     # lead was strongly ANTI-predictive in the 2021-2026 large-cap regime
-    # (point-in-time IC ~-0.03, t ~-2.4). Re-tuned to lead with quality and add a
+    # (point-in-time IC ~-0.03, t ~-2.4). Re-tuned to lead with quality + a
     # long-momentum confirmation so it buys good, reasonably-priced businesses
-    # that are actually working — validated IC ~+0.05, t ~+3.1, 76% hit at ~126d.
+    # that are actually working. Honest caveat: a 6-month hold yields too few
+    # independent windows to validate on 5y, and over the full 2010-2026 sample
+    # it's still ~flat/negative. Treat as a tilt, not a proven edge.
     "long": {
         "quality": 0.30,          # strong, well-run businesses first
         "mom_12_1": 0.25,         # confirmation the market agrees (no value traps)
@@ -75,8 +79,9 @@ HORIZONS: dict[str, dict[str, float]] = {
     # Cheap-but-working value (a few months). The original "buy near 52-week lows
     # + oversold" version caught falling knives and lost. Re-tuned to lead with
     # cheapness BUT require quality and recent/long-term momentum confirmation so
-    # it skips names that are still bleeding — validated IC ~+0.03, 67% hit,
-    # positive L/S at ~63d.
+    # it skips names that are still bleeding. The most consistent strategy in
+    # testing — positive in BOTH the recent 5y (IC ~+0.03, +21% L/S) and the full
+    # 2010-2026 sample (IC ~+0.005, +8% L/S) — though the long-run edge is modest.
     "value": {
         "value": 0.25,            # cheap on fundamentals (leads)
         "quality": 0.20,          # strong balance sheet / low debt

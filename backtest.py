@@ -171,6 +171,9 @@ def main() -> None:
         "--horizon", default="mid",
         choices=["short", "mid", "long", "value", "emerging"],
     )
+    ap.add_argument("--period", default="5y",
+                    help="price history to pull (e.g. 5y, 10y, max). Longer history "
+                         "gives more independent windows for long-horizon strategies.")
     ap.add_argument("--holding-days", type=int, default=None,
                     help="override the strategy's natural hold (config.HOLDING_DAYS)")
     ap.add_argument("--rebalance-days", type=int, default=None,
@@ -185,9 +188,9 @@ def main() -> None:
 
     prov = data_loader.provider_for(args.universe)
     tickers = universe_mod.get_universe(args.universe)
-    print(f"Loading 5y prices for {len(tickers)} tickers...")
+    print(f"Loading {args.period} prices for {len(tickers)} tickers...")
     prices = prov.get_prices(
-        tickers, period="5y", universe_key=f"{args.universe}_bt"
+        tickers, period=args.period, universe_key=f"{args.universe}_bt_{args.period}"
     )
 
     pit = args.point_in_time and args.universe != "ngx"
