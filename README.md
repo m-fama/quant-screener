@@ -189,6 +189,25 @@ The dashboard defaults to the **Emerging Stocks** universe + **Emerging**
 strategy (the early-mover lens). An optional password gate (`_check_password`)
 lets you share it via Streamlit Community Cloud.
 
+### Instant loading (precomputed snapshots)
+
+Scoring a big universe live means fetching 3y of prices for ~1,000+ tickers on
+every cold start — slow, and Streamlit Cloud wipes its cache on each redeploy.
+So the dashboard reads **precomputed snapshots** (committed under
+`data/snapshots/`) in milliseconds, and only fetches live when you tick
+**"Use live data"** in the sidebar (or when no snapshot exists for a selection).
+
+Refresh the snapshots before a deploy:
+
+```bash
+python precompute.py            # common universe×horizon combos (recommended)
+python precompute.py --all      # the full grid
+python precompute.py --only emerging:emerging us_all:mid
+```
+
+Each snapshot shows its "as of" timestamp in the dashboard. Commit the updated
+`data/snapshots/` files and redeploy — the app loads instantly with that data.
+
 ## Project layout
 
 ```
@@ -201,6 +220,8 @@ quant-screener/
   factors.py       # factor engine (price + fundamental composites)
   scoring.py       # cross-sectional z-score → composite ranking
   pipeline.py      # two-stage funnel: price-screen all → fundamentals for finalists
+  snapshots.py     # save/load precomputed bundles for instant dashboard loads
+  precompute.py    # CLI to (re)generate snapshots before a deploy
   news.py          # free news/sentiment overlay (VADER), bounded tilt + risk flags
   labels.py        # plain-English translation layer (ratings, reasons, heads-up)
   screener.py      # CLI

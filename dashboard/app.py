@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 import data_loader  # noqa: E402
 import labels  # noqa: E402
 import pipeline  # noqa: E402
+import snapshots  # noqa: E402
 import universe as universe_mod  # noqa: E402
 from backtest import walk_forward  # noqa: E402
 
@@ -74,6 +75,21 @@ def load_scored(universe_name: str, horizon: str) -> pd.DataFrame:
 def load_names(universe_name: str, tickers: tuple) -> dict:
     prov = data_loader.provider_for(universe_name)
     return prov.get_names(list(tickers))
+
+
+@st.cache_data(ttl=60 * 30, show_spinner=False)
+def load_snapshot(universe_name: str, horizon: str):
+    """Instant path: a committed, precomputed bundle (or None if not available)."""
+    return snapshots.load(universe_name, horizon)
+
+
+def _fmt_asof(iso: str) -> str:
+    """Pretty-print an ISO timestamp like '2026-06-13T12:30+00:00'."""
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(iso).strftime("%b %d, %Y %H:%M UTC")
+    except Exception:
+        return iso
 
 
 @st.cache_data(ttl=60 * 60 * 6, show_spinner=False)
@@ -217,6 +233,12 @@ st.sidebar.info(labels.HORIZON_BLURB[horizon])
 
 top_n = st.sidebar.slider("How many to show?", 5, 40, 15)
 
+live_mode = st.sidebar.checkbox(
+    "🔄 Use live data (slower)", value=False,
+    help="Off = instant load from the latest saved snapshot. "
+         "On = fetch fresh prices now (can take a minute for big universes).",
+)
+
 with st.sidebar.expander("What do the ratings mean?"):
     st.markdown(
         "- 🟢 **Strong Buy** — looks excellent vs. the others right now\n"
@@ -237,14 +259,38 @@ st.caption(
     "price trend, value, quality and steadiness, scored side by side."
 )
 
-with st.spinner("Crunching the numbers... (first load of a big universe can take a minute)"):
-    scored = load_scored(universe_name, horizon)
-    # Names/signals only matter for the names a user can actually see, so scope
-    # them to the top finalists (avoids mass per-company calls on big universes).
+# Instant path: read a committed, precomputed snapshot if one exists and the
+# user hasn't asked for live data. Falls back to live fetch otherwise.
+_snap = None if live_mode else load_snapshot(universe_name, horizon)
+
+if _snap is not None:
+    scored = _snap["scored"].copy()
     finalists = tuple(scored.head(100).index)
-    names = load_names(universe_name, finalists)
-    sectors = load_sectors(universe_name)
-    signals = load_signals(universe_name, finalists)
+    names = _snap["names"]
+    sectors = _snap["sectors"]
+    signals = _snap["signals"]
+    st.caption(
+        f"⚡ Loaded instantly from a saved snapshot ({_fmt_asof(_snap['asof'])}). "
+        "Tick **Use live data** in the sidebar for fresh prices."
+    )
+else:
+    spin = ("Fetching live data..." if live_mode else
+            "Crunching the numbers... (first load of a big universe can take a minute)")
+    with st.spinner(spin):
+        scored = load_scored(universe_name, horizon)
+        # Names/signals only matter for the names a user can actually see, so scope
+        # them to the top finalists (avoids mass per-company calls on big universes).
+        finalists = tuple(scored.head(100).index)
+        names = load_names(universe_name, finalists)
+        sectors = load_sectors(universe_name)
+        signals = load_signals(universe_name, finalists)
+    if live_mode:
+        st.caption("Showing freshly fetched live data.")
+    else:
+        st.caption(
+            "No saved snapshot for this selection yet — fetched live. "
+            "(Run `python precompute.py` to make this combo instant.)"
+        )
 
 
 def signal_for(ticker: str):
